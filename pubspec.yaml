@@ -45,6 +45,8 @@ dependencies:
   metabadge: ^0.1.0
   xml: ^6.5.0
   path_provider: ^2.1.3
+  fluttertoast: ^8.2.6
+  connectivity_plus: ^6.0.3
 
 dev_dependencies:
   flutter_test:
