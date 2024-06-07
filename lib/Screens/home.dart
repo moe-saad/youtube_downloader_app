@@ -1,8 +1,9 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
 
@@ -15,6 +16,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   //variables declaration
+  //https://youtu.be/HwWb5xelC7s?si=QDdzOWoSdeJ5uqYH
   String videoURL = '';
   final TextEditingController _controller = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -63,7 +65,7 @@ class _HomeState extends State<Home> {
     );
   }
 
-//checkConnection
+//check internet Connection
   Future<bool> checkConnection() async {
     bool isConnected = await hasInternetConnection();
     if (!isConnected) {
@@ -72,10 +74,24 @@ class _HomeState extends State<Home> {
     return isConnected;
   }
 
+//get the directory path from the user
+  Future<String?> _getUserSavePath() async {
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+
+    if (selectedDirectory != null) {
+      return selectedDirectory;
+    } else {
+      // User canceled the picker
+      throw UnsupportedError("User canceled the picker");
+    }
+  }
+
   //function to download the video
   void _downloadVideo(String? url) async {
     var ytExplode = YoutubeExplode();
     var video = await ytExplode.videos.get(url);
+    // Get user chosen save path
+    String? savePath = await _getUserSavePath();
 
     print('\n--------------------manifest-------------------------\n');
     var manifest = await ytExplode.videos.streamsClient.getManifest(url);
@@ -84,34 +100,68 @@ class _HomeState extends State<Home> {
     print('\n-----------------------streamInfo----------------------\n');
 //select audio only here
     var streamInfo = manifest.audioOnly.first;
-    print(streamInfo);
+
+    // var bestAudio = manifest.audioOnly.sortByBitrate().last;
+    // print(streamInfo.audioCodec + '\n');
+    // print(streamInfo.audioTrack);
+    // print(bestAudio.bitrate);
+    // print(streamInfo.codec);
+    // print(streamInfo.container);
+    // print(streamInfo.fragments);
+    // print(streamInfo.qualityLabel);
+    // print(streamInfo.size);
+    // print(streamInfo.tag);
+    // print(streamInfo.url);
+    // print(streamInfo.videoId);
 
     // Get the actual stream
     var stream = ytExplode.videos.streamsClient.get(streamInfo);
 
     print('\n-----------------------savePath----------------------\n');
+//android
+    if (Platform.isAndroid) {
+      savePath = savePath! + '/${video.title}.mp3';
+    }
+    //windows
+    else if (Platform.isWindows) {
+      savePath = savePath! + '\\${video.title}.mp3';
+    }
     //open a file for writing
-    final Directory? downloadsDir = await getDownloadsDirectory();
-    final savePath = '${downloadsDir!.path}/${video.title}.mp3';
+    // final Directory? downloadsDir = await getDownloadsDirectory();
+    // final savePath = '${downloadsDir!.path}/${video.title}.mp3';
+
     print(savePath);
     print('\n---------------------------------------------\n');
-    var file = File(savePath);
-    var fileStream = file.openWrite(mode: FileMode.append);
 
-    // Pipe all the content of the stream into the file.
-    await stream.pipe(fileStream);
-    Fluttertoast.showToast(
-        msg: "The Download Is Finished",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.white,
-        textColor: Theme.of(context).primaryColor,
-        fontSize: 16.0);
+    var status = await Permission.storage.status;
+    print(status);
+    if (status.isDenied) {
+      if (await Permission.storage.request().isGranted) {
+        //permission granted
+        //open the file
+        var fileStream = File(savePath!).openWrite(mode: FileMode.append);
 
-    // Close the file.
-    await fileStream.flush();
-    await fileStream.close();
+        // Pipe all the content of the stream into the file.
+        await stream.pipe(fileStream);
+
+        // Close the file.
+        await fileStream.flush();
+        await fileStream.close();
+      } else {
+        //permission denied
+        print('permission denied');
+      }
+    } else {
+      //open the file
+      var fileStream = File(savePath!).openWrite(mode: FileMode.append);
+
+      // Pipe all the content of the stream into the file.
+      await stream.pipe(fileStream);
+
+      // Close the file.
+      await fileStream.flush();
+      await fileStream.close();
+    }
   }
 
   bool isValidYouTubeUrl(String url) {
@@ -123,6 +173,7 @@ class _HomeState extends State<Home> {
     return youtubeRegex.hasMatch(url);
   }
 
+//initial state to check internet connection at the startup of the app
   @override
   void initState() {
     super.initState();
@@ -133,7 +184,14 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Youtube Downloader'),
+        title: Text(
+          'Youtube Downloader',
+          style: TextStyle(
+              color: Theme.of(context).primaryTextTheme.titleLarge!.color),
+        ),
+        backgroundColor: Theme.of(context).primaryColor,
+        elevation: 3,
+        centerTitle: true,
       ),
       body: Center(
         child: Column(
@@ -156,9 +214,11 @@ class _HomeState extends State<Home> {
                     width: 300,
                     child: TextFormField(
                       controller: _controller,
+                      initialValue:
+                          'https://www.youtube.com/watch?v=HwWb5xelC7s',
                       keyboardType: TextInputType.url,
                       decoration: InputDecoration(
-                        hintText: 'Paste URL Here',
+                        hintText: 'Paste Youtube URL Here',
                         icon: const Icon(Icons.link_rounded),
                         iconColor: Theme.of(context).primaryColor,
                       ),
@@ -183,12 +243,10 @@ class _HomeState extends State<Home> {
                       if (_formKey.currentState!.validate()) {
                         if (await checkConnection()) {
                           _downloadVideo(videoURL);
-                        } else {
-                          // Show no internet connection dialog or message
                         }
                       }
                     },
-                    child: const Text('Download Video'),
+                    child: const Text('Download'),
                   ),
                 ],
               ),
