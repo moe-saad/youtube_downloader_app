@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:youtube_downloader_app/Screens/home.dart';
+import 'package:youtube_downloader_app/Screens/settings.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,6 +22,9 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: Home(),
+      routes: {
+        SettingsScreend.screenRoute: (context) => SettingsScreend(),
+      },
     );
   }
 }

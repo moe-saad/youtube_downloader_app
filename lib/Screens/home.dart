@@ -3,12 +3,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:youtube_downloader_app/Screens/settings.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
 
 class Home extends StatefulWidget {
+  static const screenRoute = 'homeScreen';
   const Home({super.key});
 
   @override
@@ -193,6 +194,7 @@ class _HomeState extends State<Home> {
       }
     } catch (e) {
       _showToastmessage('Download Failed: ${e.toString()}');
+      print(e.toString());
     } finally {
       setState(() {
         _isDownloading = false;
@@ -230,65 +232,65 @@ class _HomeState extends State<Home> {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () => _showSettings(),
+            onPressed: () {
+              Navigator.pushNamed(context, SettingsScreend.screenRoute);
+            },
             icon: const Icon(Icons.settings),
           ),
         ],
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.only(top: 20.0, left: 15, right: 15.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Enter Youtube URL',
+              'Youtube URL',
               style: TextStyle(
                 fontSize: 16,
               ),
             ),
             const SizedBox(
-              height: 20.0,
+              height: 15.0,
             ),
             Form(
               key: _formKey,
               child: Column(
                 children: <Widget>[
-                  SizedBox(
-                    width: 300,
-                    child: TextFormField(
-                      controller: _controller,
-                      // initialValue:'https://www.youtube.com/watch?v=HwWb5xelC7s',
-                      keyboardType: TextInputType.url,
-                      decoration: InputDecoration(
-                        hintText: 'Paste Youtube URL Here',
-                        icon: const Icon(Icons.link_rounded),
-                        iconColor: Theme.of(context).primaryColor,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'This field is required';
-                        } else if (!isValidYouTubeUrl(value)) {
-                          return 'Please enter a valid YouTube URL';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) {
-                        videoURL = value;
-                      },
+                  TextFormField(
+                    controller: _controller,
+                    keyboardType: TextInputType.url,
+                    decoration: InputDecoration(
+                      hintText: 'Paste Youtube URL Here',
+                      icon: const Icon(Icons.link_rounded),
+                      iconColor: Theme.of(context).primaryColor,
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'This field is required';
+                      } else if (!isValidYouTubeUrl(value)) {
+                        return 'Please enter a valid YouTube URL';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) {
+                      videoURL = value;
+                    },
                   ),
                   const SizedBox(
                     height: 20,
                   ),
                   Visibility(
-                      visible: _isDownloading,
-                      child: Column(
-                        children: [
-                          LinearProgressIndicator(value: _progress),
-                          const SizedBox(height: 20),
-                          Text('${(_progress * 100).toStringAsFixed(0)}%'),
-                          const SizedBox(height: 20),
-                        ],
-                      )),
+                    visible: _isDownloading,
+                    child: Column(
+                      children: [
+                        LinearProgressIndicator(value: _progress),
+                        const SizedBox(height: 20),
+                        Text('${(_progress * 100).toStringAsFixed(0)}%'),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
                   ElevatedButton(
                     onPressed: () async {
                       if (_formKey.currentState!.validate()) {
@@ -299,12 +301,6 @@ class _HomeState extends State<Home> {
                     },
                     child: const Text('Download'),
                   ),
-                  ElevatedButton(
-                    onPressed: () {
-                      openAppSettings();
-                    },
-                    child: const Text('open settings'),
-                  ),
                 ],
               ),
             ),
@@ -313,6 +309,4 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  _showSettings() {}
 }
