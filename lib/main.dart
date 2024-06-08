@@ -13,6 +13,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'YouTube Downloader',
+      theme: ThemeData(
+        appBarTheme: const AppBarTheme(
+          actionsIconTheme: IconThemeData(
+            color: Colors.white,
+          ),
+        ),
+      ),
       home: Home(),
     );
   }

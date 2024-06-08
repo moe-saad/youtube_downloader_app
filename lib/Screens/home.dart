@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -18,6 +19,9 @@ class _HomeState extends State<Home> {
   //variables declaration
   //https://youtu.be/HwWb5xelC7s?si=QDdzOWoSdeJ5uqYH
   String videoURL = '';
+  String? _savePath;
+  double _progress = 0.0;
+  bool _isDownloading = false;
   final TextEditingController _controller = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -86,81 +90,113 @@ class _HomeState extends State<Home> {
     }
   }
 
-  //function to download the video
-  void _downloadVideo(String? url) async {
-    var ytExplode = YoutubeExplode();
-    var video = await ytExplode.videos.get(url);
-    // Get user chosen save path
-    String? savePath = await _getUserSavePath();
-
-    print('\n--------------------manifest-------------------------\n');
-    var manifest = await ytExplode.videos.streamsClient.getManifest(url);
-    print(manifest);
-
-    print('\n-----------------------streamInfo----------------------\n');
-//select audio only here
-    var streamInfo = manifest.audioOnly.first;
-
-    // var bestAudio = manifest.audioOnly.sortByBitrate().last;
-    // print(streamInfo.audioCodec + '\n');
-    // print(streamInfo.audioTrack);
-    // print(bestAudio.bitrate);
-    // print(streamInfo.codec);
-    // print(streamInfo.container);
-    // print(streamInfo.fragments);
-    // print(streamInfo.qualityLabel);
-    // print(streamInfo.size);
-    // print(streamInfo.tag);
-    // print(streamInfo.url);
-    // print(streamInfo.videoId);
-
-    // Get the actual stream
-    var stream = ytExplode.videos.streamsClient.get(streamInfo);
-
-    print('\n-----------------------savePath----------------------\n');
-//android
-    if (Platform.isAndroid) {
-      savePath = savePath! + '/${video.title}.mp3';
-    }
-    //windows
-    else if (Platform.isWindows) {
-      savePath = savePath! + '\\${video.title}.mp3';
-    }
-    //open a file for writing
-    // final Directory? downloadsDir = await getDownloadsDirectory();
-    // final savePath = '${downloadsDir!.path}/${video.title}.mp3';
-
-    print(savePath);
-    print('\n---------------------------------------------\n');
-
+//request permission if it's not granted
+  Future<void> requestPermission() async {
     var status = await Permission.storage.status;
-    print(status);
-    if (status.isDenied) {
+    if (!status.isGranted) {
+      await Permission.storage.request();
+    }
+  }
+
+  void _updateProgress(double progress) {
+    setState(() {
+      _progress = progress;
+    });
+  }
+
+  void _showToastmessage(String message) {
+    Platform.isAndroid
+        ? Fluttertoast.showToast(
+            msg: message,
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.BOTTOM,
+            timeInSecForIosWeb: 1,
+            backgroundColor: Colors.black,
+            textColor: Colors.white,
+            fontSize: 16.0,
+          )
+        : null;
+  }
+
+  //function to download the video
+  void _downloadFunction(String? url) async {
+    setState(() {
+      //to show the progress bar
+      _isDownloading = true;
+      // Reset progress to 0 at the beginning of the download
+      _progress = 0.0;
+    });
+    try {
+      var ytExplode = YoutubeExplode();
+      var video = await ytExplode.videos.get(url);
+
+      print('\n--------------------manifest-------------------------\n');
+      var manifest = await ytExplode.videos.streamsClient.getManifest(url);
+      print(manifest);
+
+      // print('\n-----------------------streamInfo----------------------\n');
+      var streamInfo = manifest.audioOnly.first;
+
+      // var bestAudio = manifest.audioOnly.sortByBitrate().last;
+      // print(streamInfo.audioCodec + '\n');
+      // print(streamInfo.audioTrack);
+      // print(bestAudio.bitrate);
+      // print(streamInfo.codec);
+      // print(streamInfo.container);
+      // print(streamInfo.fragments);
+      // print(streamInfo.qualityLabel);
+      // print(streamInfo.size);
+      // print(streamInfo.tag);
+      // print(streamInfo.url);
+      // print(streamInfo.videoId);
+
+      // Get the actual stream
+      var stream = ytExplode.videos.streamsClient.get(streamInfo);
+
       if (await Permission.storage.request().isGranted) {
-        //permission granted
+        // Either the permission was already granted before or the user just granted it.
+        print('\n-----------------------savePath----------------------\n');
+
+        //android
+        if (Platform.isAndroid) {
+          _savePath = '/storage/emulated/0/Download/${video.title}.mp3';
+        }
+
+        //windows
+        else if (Platform.isWindows) {
+          _savePath = await _getUserSavePath();
+          _savePath = '${_savePath!}\\${video.title}.mp3';
+        }
+        print(_savePath);
         //open the file
-        var fileStream = File(savePath!).openWrite(mode: FileMode.append);
+        var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
+
+        var totalBytes = streamInfo.size.totalBytes;
+        var downloadedBytes = 0;
+
+        await for (var data in stream) {
+          downloadedBytes += data.length;
+          fileStream.add(data);
+          double progress = downloadedBytes / totalBytes;
+          _updateProgress(progress);
+        }
 
         // Pipe all the content of the stream into the file.
         await stream.pipe(fileStream);
-
+        _showToastmessage('Download Complete: ${video.title}');
         // Close the file.
         await fileStream.flush();
         await fileStream.close();
       } else {
-        //permission denied
-        print('permission denied');
+        // The permission was denied or not yet requested.
+        requestPermission();
       }
-    } else {
-      //open the file
-      var fileStream = File(savePath!).openWrite(mode: FileMode.append);
-
-      // Pipe all the content of the stream into the file.
-      await stream.pipe(fileStream);
-
-      // Close the file.
-      await fileStream.flush();
-      await fileStream.close();
+    } catch (e) {
+      _showToastmessage('Download Failed: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isDownloading = false;
+      });
     }
   }
 
@@ -192,6 +228,12 @@ class _HomeState extends State<Home> {
         backgroundColor: Theme.of(context).primaryColor,
         elevation: 3,
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () => _showSettings(),
+            icon: const Icon(Icons.settings),
+          ),
+        ],
       ),
       body: Center(
         child: Column(
@@ -214,8 +256,7 @@ class _HomeState extends State<Home> {
                     width: 300,
                     child: TextFormField(
                       controller: _controller,
-                      initialValue:
-                          'https://www.youtube.com/watch?v=HwWb5xelC7s',
+                      // initialValue:'https://www.youtube.com/watch?v=HwWb5xelC7s',
                       keyboardType: TextInputType.url,
                       decoration: InputDecoration(
                         hintText: 'Paste Youtube URL Here',
@@ -238,15 +279,31 @@ class _HomeState extends State<Home> {
                   const SizedBox(
                     height: 20,
                   ),
+                  Visibility(
+                      visible: _isDownloading,
+                      child: Column(
+                        children: [
+                          LinearProgressIndicator(value: _progress),
+                          const SizedBox(height: 20),
+                          Text('${(_progress * 100).toStringAsFixed(0)}%'),
+                          const SizedBox(height: 20),
+                        ],
+                      )),
                   ElevatedButton(
                     onPressed: () async {
                       if (_formKey.currentState!.validate()) {
                         if (await checkConnection()) {
-                          _downloadVideo(videoURL);
+                          _downloadFunction(videoURL);
                         }
                       }
                     },
                     child: const Text('Download'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      openAppSettings();
+                    },
+                    child: const Text('open settings'),
                   ),
                 ],
               ),
@@ -256,4 +313,6 @@ class _HomeState extends State<Home> {
       ),
     );
   }
+
+  _showSettings() {}
 }
