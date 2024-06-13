@@ -1,12 +1,17 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:youtube_downloader_app/Screens/settings.dart';
+import 'package:youtube_downloader_app/widgets/audio_item.dart';
+import 'package:youtube_downloader_app/widgets/video_item.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
+
+enum MediaType { audio, video }
 
 class Home extends StatefulWidget {
   static const screenRoute = 'homeScreen';
@@ -20,11 +25,32 @@ class _HomeState extends State<Home> {
   //variables declaration
   //https://youtu.be/HwWb5xelC7s?si=QDdzOWoSdeJ5uqYH
   String videoURL = '';
-  String? _savePath;
+  String? _savePath = '';
   double _progress = 0.0;
   bool _isDownloading = false;
+  bool _isLoading = false;
+  var ytExplode = YoutubeExplode();
+  Video? video;
   final TextEditingController _controller = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  MediaType? _selectedMediaType = MediaType.audio;
+  // Get the screen size
+//list for audio
+  List<AudioOnlyStreamInfo> _audioList = [];
+//list for video
+  List<MuxedStreamInfo> _videoList = [];
+
+  Future<void> loadVideoInfo(String url) async {
+    video = await ytExplode.videos.get(url);
+    //call the manifest
+    var manifest = await ytExplode.videos.streamsClient.getManifest(url);
+    _audioList = manifest.audioOnly.toList();
+    _videoList = manifest.muxed.toList();
+
+    setState(() {
+      _isLoading = true;
+    });
+  }
 
 //return true of false based on internet connection
   Future<bool> hasInternetConnection() async {
@@ -52,9 +78,6 @@ class _HomeState extends State<Home> {
                 bool isConnected = await hasInternetConnection();
                 if (isConnected) {
                   Navigator.of(context).pop(); // Close the dialog
-                } else {
-                  // Show some message if needed
-                  print('\nstill without connection\n');
                 }
               },
             ),
@@ -80,7 +103,7 @@ class _HomeState extends State<Home> {
   }
 
 //get the directory path from the user
-  Future<String?> _getUserSavePath() async {
+  Future<String?> getUserSavePath() async {
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
 
     if (selectedDirectory != null) {
@@ -112,15 +135,277 @@ class _HomeState extends State<Home> {
             toastLength: Toast.LENGTH_LONG,
             gravity: ToastGravity.BOTTOM,
             timeInSecForIosWeb: 1,
-            backgroundColor: Colors.black,
+            backgroundColor: Theme.of(context).primaryColor,
             textColor: Colors.white,
             fontSize: 16.0,
           )
         : null;
   }
 
-  //function to download the video
-  void _downloadFunction(String? url) async {
+  bool isValidYouTubeUrl(String url) {
+    final youtubeRegex = RegExp(
+      r'^(https?\:\/\/)?(www\.youtube\.com|music\.youtube\.com|youtu\.?be)\/.+$',
+      caseSensitive: false,
+      multiLine: false,
+    );
+    return youtubeRegex.hasMatch(url);
+  }
+
+//initial state to check internet connection at the startup of the app
+  @override
+  void initState() {
+    super.initState();
+    checkConnection();
+    _isLoading = false;
+  }
+
+//this function to show only the hours,minutes,seconds of the duration video
+  String formatDuration(String durationString) {
+    // Split the duration string by the colon
+    List<String> parts = durationString.split(':');
+
+    // Extract hours, minutes, and seconds
+    String hours = parts[0].padLeft(2, '0');
+    String minutes = parts[1].padLeft(2, '0');
+    String seconds = parts[2].split('.')[0].padLeft(2, '0');
+
+    // Combine hours, minutes, and seconds into the desired format
+    return '$hours:$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Size screenSize = MediaQuery.of(context).size;
+    //TextStyle of primary text
+    TextStyle primaryText = TextStyle(
+        color: Theme.of(context).primaryColor,
+        fontSize: screenSize.width < 600 ? 20 : 25);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Youtube Downloader',
+          style: TextStyle(
+              color: Theme.of(context).primaryTextTheme.titleLarge!.color),
+        ),
+        backgroundColor: Theme.of(context).primaryColor,
+        centerTitle: true,
+        shadowColor: Theme.of(context).primaryColor,
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, SettingsScreend.screenRoute);
+            },
+            icon: const Icon(Icons.settings),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 20.0, left: 15, right: 15.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: <Widget>[
+                    TextFormField(
+                      controller: _controller,
+                      keyboardType: TextInputType.url,
+                      decoration: InputDecoration(
+                        hintText: 'Paste Youtube URL Here',
+                        icon: const Icon(Icons.link_rounded),
+                        iconColor: Theme.of(context).primaryColor,
+                        suffix: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _controller.clear();
+                              _isLoading = false;
+                              _audioList.clear();
+                              _videoList.clear();
+                              video = null;
+                            });
+                          },
+                          icon: const Icon(
+                            Icons.cleaning_services_outlined,
+                            color: Colors.deepPurple,
+                          ),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'This field is required';
+                        } else if (!isValidYouTubeUrl(value)) {
+                          return 'Please enter a valid YouTube URL';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) {
+                        videoURL = value;
+                      },
+                    ),
+                    const SizedBox(
+                      height: 20,
+                    ),
+                    //progress line indicator shown only when downloading
+                    Visibility(
+                      visible: _isDownloading,
+                      child: Column(
+                        children: [
+                          LinearProgressIndicator(value: _progress),
+                          const SizedBox(height: 20),
+                          Text('${(_progress * 100).toStringAsFixed(0)}%'),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (_formKey.currentState!.validate()) {
+                          if (await checkConnection()) {
+                            loadVideoInfo(videoURL);
+                          }
+                        }
+                      },
+                      child: Text(
+                        'Search',
+                        style: primaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              //load video info
+              const SizedBox(
+                height: 20.0,
+              ),
+              _isLoading
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        List<Widget> children = [
+                          Image.network(
+                            video!.thumbnails.highResUrl,
+                            height: 200,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(18.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  video!.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: primaryText,
+                                ),
+                                Text(
+                                  video!.author,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                Text(
+                                  'View Count: ${video!.engagement.viewCount.toString()}',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                Text(
+                                  'Duration: ${formatDuration(
+                                    video!.duration.toString(),
+                                  )}',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        ];
+
+                        return Container(
+                          alignment: Alignment.topLeft,
+                          // decoration: BoxDecoration(
+                          //   border: Border.all(color: Colors.black),
+                          // ),
+                          child: screenSize.width < 600
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: children,
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: children,
+                                ),
+                        );
+                      },
+                    )
+                  : const SizedBox.shrink(),
+              const Divider(),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: ListTile(
+                      title: const Text('Audio'),
+                      leading: Radio<MediaType>(
+                        value: MediaType.audio,
+                        groupValue: _selectedMediaType,
+                        onChanged: (MediaType? value) {
+                          setState(() {
+                            _selectedMediaType = value;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: ListTile(
+                      title: const Text('Video'),
+                      leading: Radio<MediaType>(
+                        value: MediaType.video,
+                        groupValue: _selectedMediaType,
+                        onChanged: (MediaType? value) {
+                          setState(() {
+                            _selectedMediaType = value;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _selectedMediaType == MediaType.audio
+                    ? _audioList.length
+                    : _videoList.length,
+                itemBuilder: (context, index) {
+                  return _selectedMediaType == MediaType.audio
+                      ? AudioItem(
+                          audio: _audioList[index],
+                          saveAudio: downloadFunction,
+                        )
+                      : VideoItem(
+                          video: _videoList[index],
+                          saveVideo: downloadFunction,
+                        );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
     setState(() {
       //to show the progress bar
       _isDownloading = true;
@@ -128,46 +413,25 @@ class _HomeState extends State<Home> {
       _progress = 0.0;
     });
     try {
-      var ytExplode = YoutubeExplode();
-      var video = await ytExplode.videos.get(url);
-
-      print('\n--------------------manifest-------------------------\n');
-      var manifest = await ytExplode.videos.streamsClient.getManifest(url);
-      print(manifest);
-
-      // print('\n-----------------------streamInfo----------------------\n');
-      var streamInfo = manifest.audioOnly.first;
-
-      // var bestAudio = manifest.audioOnly.sortByBitrate().last;
-      // print(streamInfo.audioCodec + '\n');
-      // print(streamInfo.audioTrack);
-      // print(bestAudio.bitrate);
-      // print(streamInfo.codec);
-      // print(streamInfo.container);
-      // print(streamInfo.fragments);
-      // print(streamInfo.qualityLabel);
-      // print(streamInfo.size);
-      // print(streamInfo.tag);
-      // print(streamInfo.url);
-      // print(streamInfo.videoId);
-
       // Get the actual stream
       var stream = ytExplode.videos.streamsClient.get(streamInfo);
 
       if (await Permission.storage.request().isGranted) {
         // Either the permission was already granted before or the user just granted it.
-        print('\n-----------------------savePath----------------------\n');
-
         //android
         if (Platform.isAndroid) {
-          _savePath = '/storage/emulated/0/Download/${video.title}.mp3';
+          _savePath = await getUserSavePath();
+          // _savePath = '/storage/emulated/0/Download/${video!.id}.$itemtype';
+          _savePath = '${_savePath}/${video!.id}.$itemtype';
         }
 
         //windows
         else if (Platform.isWindows) {
-          _savePath = await _getUserSavePath();
-          _savePath = '${_savePath!}\\${video.title}.mp3';
+          _savePath = await getUserSavePath();
+          // _savePath = '${_savePath!}\\${video.title}.$itemtype';
+          _savePath = '${_savePath!}\\${video!.id}.$itemtype';
         }
+        print('\n-----------------------savePath----------------------\n');
         print(_savePath);
         //open the file
         var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
@@ -182,9 +446,8 @@ class _HomeState extends State<Home> {
           _updateProgress(progress);
         }
 
-        // Pipe all the content of the stream into the file.
-        await stream.pipe(fileStream);
-        _showToastmessage('Download Complete: ${video.title}');
+        _showToastmessage('Download Complete: ${video!.title}');
+
         // Close the file.
         await fileStream.flush();
         await fileStream.close();
@@ -194,119 +457,18 @@ class _HomeState extends State<Home> {
       }
     } catch (e) {
       _showToastmessage('Download Failed: ${e.toString()}');
-      print(e.toString());
-    } finally {
+      if (kDebugMode) {
+        print('\n----------------------catch error----------------------\n');
+      }
+      if (kDebugMode) {
+        print(e.toString());
+      }
+    }
+    //finally
+    finally {
       setState(() {
         _isDownloading = false;
       });
     }
-  }
-
-  bool isValidYouTubeUrl(String url) {
-    final youtubeRegex = RegExp(
-      r'^(https?\:\/\/)?(www\.youtube\.com|youtu\.?be)\/.+$',
-      caseSensitive: false,
-      multiLine: false,
-    );
-    return youtubeRegex.hasMatch(url);
-  }
-
-//initial state to check internet connection at the startup of the app
-  @override
-  void initState() {
-    super.initState();
-    checkConnection();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Youtube Downloader',
-          style: TextStyle(
-              color: Theme.of(context).primaryTextTheme.titleLarge!.color),
-        ),
-        backgroundColor: Theme.of(context).primaryColor,
-        elevation: 3,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.pushNamed(context, SettingsScreend.screenRoute);
-            },
-            icon: const Icon(Icons.settings),
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.only(top: 20.0, left: 15, right: 15.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Youtube URL',
-              style: TextStyle(
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(
-              height: 15.0,
-            ),
-            Form(
-              key: _formKey,
-              child: Column(
-                children: <Widget>[
-                  TextFormField(
-                    controller: _controller,
-                    keyboardType: TextInputType.url,
-                    decoration: InputDecoration(
-                      hintText: 'Paste Youtube URL Here',
-                      icon: const Icon(Icons.link_rounded),
-                      iconColor: Theme.of(context).primaryColor,
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'This field is required';
-                      } else if (!isValidYouTubeUrl(value)) {
-                        return 'Please enter a valid YouTube URL';
-                      }
-                      return null;
-                    },
-                    onChanged: (value) {
-                      videoURL = value;
-                    },
-                  ),
-                  const SizedBox(
-                    height: 20,
-                  ),
-                  Visibility(
-                    visible: _isDownloading,
-                    child: Column(
-                      children: [
-                        LinearProgressIndicator(value: _progress),
-                        const SizedBox(height: 20),
-                        Text('${(_progress * 100).toStringAsFixed(0)}%'),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (_formKey.currentState!.validate()) {
-                        if (await checkConnection()) {
-                          _downloadFunction(videoURL);
-                        }
-                      }
-                    },
-                    child: const Text('Download'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

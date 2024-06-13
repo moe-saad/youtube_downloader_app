@@ -20,10 +20,18 @@ class MyApp extends StatelessWidget {
             color: Colors.white,
           ),
         ),
+        elevatedButtonTheme: const ElevatedButtonThemeData(
+          style: ButtonStyle(
+            fixedSize: WidgetStatePropertyAll(Size.fromWidth(200)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(vertical: 5),
+            ),
+          ),
+        ),
       ),
       home: Home(),
       routes: {
-        SettingsScreend.screenRoute: (context) => SettingsScreend(),
+        SettingsScreend.screenRoute: (context) => const SettingsScreend(),
       },
     );
   }

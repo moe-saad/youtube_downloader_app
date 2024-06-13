@@ -23,7 +23,7 @@ class SettingsScreend extends StatelessWidget {
             //title
             const Text('Download Folder:'),
             //show the current path
-            Text('save path here'),
+            const Text('save path here'),
             //change path button
             ElevatedButton(
               onPressed: () {},
