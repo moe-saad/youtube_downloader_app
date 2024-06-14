@@ -5,11 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_downloader_app/Screens/settings.dart';
 import 'package:youtube_downloader_app/widgets/audio_item.dart';
 import 'package:youtube_downloader_app/widgets/video_item.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as path;
+import 'package:archive/archive_io.dart';
 
 enum MediaType { audio, video }
 
@@ -26,6 +31,7 @@ class _HomeState extends State<Home> {
   //https://youtu.be/HwWb5xelC7s?si=QDdzOWoSdeJ5uqYH
   String videoURL = '';
   String? _savePath = '';
+  final String _savePathKey = 'savePath';
   double _progress = 0.0;
   bool _isDownloading = false;
   bool _isLoading = false;
@@ -34,10 +40,9 @@ class _HomeState extends State<Home> {
   final TextEditingController _controller = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   MediaType? _selectedMediaType = MediaType.audio;
-  // Get the screen size
-//list for audio
+  //list of audios
   List<AudioOnlyStreamInfo> _audioList = [];
-//list for video
+  //list of videos
   List<MuxedStreamInfo> _videoList = [];
 
   Future<void> loadVideoInfo(String url) async {
@@ -110,7 +115,7 @@ class _HomeState extends State<Home> {
       return selectedDirectory;
     } else {
       // User canceled the picker
-      throw UnsupportedError("User canceled the picker");
+      throw ("User canceled the File picker");
     }
   }
 
@@ -173,6 +178,90 @@ class _HomeState extends State<Home> {
     return '$hours:$minutes:$seconds';
   }
 
+  String sanitizeFileName(String input) {
+    // Characters that are not allowed in file names on Windows or Android
+    final invalidChars = RegExp(r'[\\/*?:"<>|\.]');
+
+    // Replace all invalid characters with an empty string
+    return input.replaceAll(invalidChars, '');
+  }
+
+  Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
+    setState(() {
+      //to show the progress bar
+      _isDownloading = true;
+      // Reset progress to 0 at the beginning of the download
+      _progress = 0.0;
+    });
+    try {
+      // Get the actual stream
+      var stream = ytExplode.videos.streamsClient.get(streamInfo);
+
+      if (await Permission.storage.request().isGranted) {
+        // Either the permission was already granted before or the user just granted it.
+        SharedPreferences sharedPref = await SharedPreferences.getInstance();
+        if (sharedPref.getString(_savePathKey) == null) {
+          _savePath = await getUserSavePath();
+          sharedPref.setString(_savePathKey, _savePath!);
+        } else {
+          _savePath = sharedPref.getString(_savePathKey);
+        }
+
+        if (Platform.isAndroid) {
+          // _savePath = '/storage/emulated/0/Download/${video!.id}.$itemtype';
+          // _savePath = '$_savePath/${video!.id}.$itemtype';
+          _savePath = '$_savePath/${sanitizeFileName(video!.title)}.$itemtype';
+        }
+
+        //windows
+        else if (Platform.isWindows) {
+          _savePath =
+              '${_savePath!}\\${sanitizeFileName(video!.title)}.$itemtype';
+        }
+        print('\n-----------------------savePath----------------------\n');
+        print(_savePath);
+        //open the file
+        var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
+
+        var totalBytes = streamInfo.size.totalBytes;
+        var downloadedBytes = 0;
+
+        await for (var data in stream) {
+          downloadedBytes += data.length;
+          fileStream.add(data);
+          double progress = downloadedBytes / totalBytes;
+          _updateProgress(progress);
+        }
+        // convertWebmToMp3(_savePath!, outputPath);
+
+        _showToastmessage('Download Complete: ${video!.title}');
+
+        // Close the file.
+        await fileStream.flush();
+        await fileStream.close();
+      } else {
+        // The permission was denied or not yet requested.
+        requestPermission();
+      }
+    } catch (e) {
+      if (Platform.isAndroid) {
+        _showToastmessage('Download Failed: ${e.toString()}');
+      }
+      if (kDebugMode) {
+        print('\n----------------------catch error----------------------\n');
+      }
+      if (kDebugMode) {
+        print(e.toString());
+      }
+    }
+    //finally
+    finally {
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
@@ -194,7 +283,11 @@ class _HomeState extends State<Home> {
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.pushNamed(context, SettingsScreend.screenRoute);
+              Navigator.pushNamed(context, SettingsScreend.screenRoute,
+                  arguments: {
+                    'savePathKey': _savePathKey,
+                    'getuserpath': getUserSavePath,
+                  });
             },
             icon: const Icon(Icons.settings),
           ),
@@ -405,70 +498,56 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
-    setState(() {
-      //to show the progress bar
-      _isDownloading = true;
-      // Reset progress to 0 at the beginning of the download
-      _progress = 0.0;
-    });
-    try {
-      // Get the actual stream
-      var stream = ytExplode.videos.streamsClient.get(streamInfo);
+  Future<void> downloadAndSetupFFmpeg() async {
+    const ffmpegUrl =
+        'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+    final tempDir = Directory.systemTemp.createTempSync();
+    final zipFilePath = path.join(tempDir.path, 'ffmpeg.zip');
 
-      if (await Permission.storage.request().isGranted) {
-        // Either the permission was already granted before or the user just granted it.
-        //android
-        if (Platform.isAndroid) {
-          _savePath = await getUserSavePath();
-          // _savePath = '/storage/emulated/0/Download/${video!.id}.$itemtype';
-          _savePath = '${_savePath}/${video!.id}.$itemtype';
-        }
+    // Download FFmpeg zip file
+    final response = await http.get(Uri.parse(ffmpegUrl));
+    final zipFile = File(zipFilePath);
+    await zipFile.writeAsBytes(response.bodyBytes);
 
-        //windows
-        else if (Platform.isWindows) {
-          _savePath = await getUserSavePath();
-          // _savePath = '${_savePath!}\\${video.title}.$itemtype';
-          _savePath = '${_savePath!}\\${video!.id}.$itemtype';
-        }
-        print('\n-----------------------savePath----------------------\n');
-        print(_savePath);
-        //open the file
-        var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
-
-        var totalBytes = streamInfo.size.totalBytes;
-        var downloadedBytes = 0;
-
-        await for (var data in stream) {
-          downloadedBytes += data.length;
-          fileStream.add(data);
-          double progress = downloadedBytes / totalBytes;
-          _updateProgress(progress);
-        }
-
-        _showToastmessage('Download Complete: ${video!.title}');
-
-        // Close the file.
-        await fileStream.flush();
-        await fileStream.close();
+    // Extract the zip file
+    final bytes = zipFile.readAsBytesSync();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    for (final file in archive) {
+      final filePath = path.join(tempDir.path, file.name);
+      if (file.isFile) {
+        final f = File(filePath);
+        f.createSync(recursive: true);
+        f.writeAsBytesSync(file.content as List<int>);
       } else {
-        // The permission was denied or not yet requested.
-        requestPermission();
-      }
-    } catch (e) {
-      _showToastmessage('Download Failed: ${e.toString()}');
-      if (kDebugMode) {
-        print('\n----------------------catch error----------------------\n');
-      }
-      if (kDebugMode) {
-        print(e.toString());
+        Directory(filePath).create(recursive: true);
       }
     }
-    //finally
-    finally {
-      setState(() {
-        _isDownloading = false;
-      });
+
+    final extractedDir = Directory(tempDir.path)
+        .listSync()
+        .firstWhere((element) => element is Directory);
+
+    // Add the bin directory to PATH
+    final binPath = path.join(extractedDir.path, 'bin');
+    final currentPath = Platform.environment['PATH'];
+    final newPath = '$currentPath;$binPath';
+
+    // Set the PATH environment variable
+    Process.runSync('setx', ['PATH', newPath]);
+
+    print('FFmpeg downloaded and PATH set successfully.');
+  }
+
+  Future<void> convertWebmToMp3(String inputPath, String outputPath) async {
+    // Ensure FFmpeg is available
+    await downloadAndSetupFFmpeg();
+
+    final result = await Process.run('ffmpeg', ['-i', inputPath, outputPath]);
+
+    if (result.exitCode == 0) {
+      print('Conversion successful');
+    } else {
+      print('Conversion failed: ${result.stderr}');
     }
   }
 }

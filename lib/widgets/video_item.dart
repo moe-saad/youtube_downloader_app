@@ -12,7 +12,8 @@ class VideoItem extends StatelessWidget {
       leading: const Icon(Icons.video_file),
       iconColor: Theme.of(context).primaryColor,
       enableFeedback: true,
-      title: Text('${video.videoResolution} - ${video.size}'),
+      title: Text(
+          '${video.videoResolution} - ${video.size} - ${video.framerate.framesPerSecond.toString()} fps'),
       trailing: IconButton(
         icon: const Icon(Icons.download),
         onPressed: () {

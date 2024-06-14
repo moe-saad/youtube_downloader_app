@@ -31,7 +31,7 @@ class MyApp extends StatelessWidget {
       ),
       home: Home(),
       routes: {
-        SettingsScreend.screenRoute: (context) => const SettingsScreend(),
+        SettingsScreend.screenRoute: (context) => SettingsScreend(),
       },
     );
   }

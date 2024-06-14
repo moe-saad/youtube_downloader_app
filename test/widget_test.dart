@@ -1,88 +1,90 @@
-import 'dart:io';
+// Copyright 2013 The Flutter Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// ignore_for_file: public_member_api_docs
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:open_file_manager/open_file_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      title: 'SharedPreferences Demo',
+      home: SharedPreferencesDemo(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  final _androidFolderTypes = [FolderType.recent, FolderType.download];
-  var _selectedFolderType = FolderType.download;
-  final _subFolderPathCtrl = TextEditingController();
+class SharedPreferencesDemo extends StatefulWidget {
+  const SharedPreferencesDemo({super.key});
+
+  @override
+  SharedPreferencesDemoState createState() => SharedPreferencesDemoState();
+}
+
+class SharedPreferencesDemoState extends State<SharedPreferencesDemo> {
+  final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
+  late Future<int> _counter;
+
+  Future<void> _incrementCounter() async {
+    final SharedPreferences prefs = await _prefs;
+    final int counter = (prefs.getInt('counter') ?? 0) + 1;
+
+    setState(() {
+      _counter = prefs.setInt('counter', counter).then((bool success) {
+        return counter;
+      });
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _counter = _prefs.then((SharedPreferences prefs) {
+      return prefs.getInt('counter') ?? 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Plugin example app'),
-        ),
-        body: Column(
-          children: [
-            const SizedBox(height: 32),
-            if (Platform.isAndroid) ...[
-              const Text(
-                'Select Android Folder type',
-                style: TextStyle(fontSize: 20),
-              ),
-              ListView.builder(
-                itemCount: _androidFolderTypes.length,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemBuilder: (context, i) => RadioListTile<FolderType>(
-                  value: _androidFolderTypes[i],
-                  groupValue: _selectedFolderType,
-                  title: Text(_androidFolderTypes[i].name),
-                  onChanged: (folderType) {
-                    if (folderType != null &&
-                        folderType != _selectedFolderType) {
-                      setState(() => _selectedFolderType = folderType);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('SharedPreferences Demo'),
+      ),
+      body: Center(
+          child: FutureBuilder<int>(
+              future: _counter,
+              builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                switch (snapshot.connectionState) {
+                  case ConnectionState.none:
+                  case ConnectionState.waiting:
+                    return const CircularProgressIndicator();
+                  case ConnectionState.active:
+                  case ConnectionState.done:
+                    if (snapshot.hasError) {
+                      return Text('Error: ${snapshot.error}');
+                    } else {
+                      return Text(
+                        'Button tapped ${snapshot.data} time${snapshot.data == 1 ? '' : 's'}.\n\n'
+                        'This should persist across restarts.',
+                      );
                     }
-                  },
-                ),
-              ),
-            ],
-            if (Platform.isIOS) ...[
-              const Text(
-                'Write iOS sub-folder path',
-                style: TextStyle(fontSize: 20),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextFormField(
-                  controller: _subFolderPathCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Sub folder path (Optional)',
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () {
-                openFileManager(
-                  androidConfig: AndroidConfig(
-                    folderType: _selectedFolderType,
-                  ),
-                  iosConfig: IosConfig(
-                    subFolderPath: _subFolderPathCtrl.text.trim(),
-                  ),
-                );
-              },
-              child: const Text('Open File Manager'),
-            ),
-          ],
-        ),
+                }
+              })),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _incrementCounter,
+        tooltip: 'Increment',
+        child: const Icon(Icons.add),
       ),
     );
   }
