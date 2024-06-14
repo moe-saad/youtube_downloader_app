@@ -40,7 +40,7 @@ class _HomeState extends State<Home> {
   List<AudioOnlyStreamInfo> _audioList = [];
   //list of videos
   List<MuxedStreamInfo> _videoList = [];
-  var outputPath;
+  Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
 
   Future<void> loadVideoInfo(String url) async {
     video = await ytExplode.videos.get(url);
@@ -196,7 +196,7 @@ class _HomeState extends State<Home> {
 
       if (await Permission.storage.request().isGranted) {
         // Either the permission was already granted before or the user just granted it.
-        SharedPreferences sharedPref = await SharedPreferences.getInstance();
+        SharedPreferences sharedPref = await _sharedPref;
         if (sharedPref.getString(_savePathKey) == null) {
           _savePath = await getUserSavePath();
           sharedPref.setString(_savePathKey, _savePath!);
@@ -396,18 +396,32 @@ class _HomeState extends State<Home> {
                                     fontSize: 18,
                                   ),
                                 ),
-                                Text(
-                                  'View Count: ${video!.engagement.viewCount.toString()}',
-                                  style: const TextStyle(
-                                    fontSize: 18,
+                                ListTile(
+                                  dense: true,
+                                  leading: Icon(
+                                    Icons.remove_red_eye,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                  title: Text(
+                                    ' ${video!.engagement.viewCount.toString()}',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                    ),
                                   ),
                                 ),
-                                Text(
-                                  'Duration: ${formatDuration(
-                                    video!.duration.toString(),
-                                  )}',
-                                  style: const TextStyle(
-                                    fontSize: 18,
+                                ListTile(
+                                  dense: true,
+                                  leading: Icon(
+                                    Icons.access_time,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                  title: Text(
+                                    formatDuration(
+                                      video!.duration.toString(),
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -433,6 +447,7 @@ class _HomeState extends State<Home> {
                       },
                     )
                   : const SizedBox.shrink(),
+
               const Divider(),
               Row(
                 children: [
