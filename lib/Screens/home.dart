@@ -11,10 +11,6 @@ import 'package:youtube_downloader_app/widgets/audio_item.dart';
 import 'package:youtube_downloader_app/widgets/video_item.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
-import 'package:archive/archive_io.dart';
 
 enum MediaType { audio, video }
 
@@ -44,6 +40,7 @@ class _HomeState extends State<Home> {
   List<AudioOnlyStreamInfo> _audioList = [];
   //list of videos
   List<MuxedStreamInfo> _videoList = [];
+  var outputPath;
 
   Future<void> loadVideoInfo(String url) async {
     video = await ytExplode.videos.get(url);
@@ -232,7 +229,6 @@ class _HomeState extends State<Home> {
           double progress = downloadedBytes / totalBytes;
           _updateProgress(progress);
         }
-        // convertWebmToMp3(_savePath!, outputPath);
 
         _showToastmessage('Download Complete: ${video!.title}');
 
@@ -496,58 +492,5 @@ class _HomeState extends State<Home> {
         ),
       ),
     );
-  }
-
-  Future<void> downloadAndSetupFFmpeg() async {
-    const ffmpegUrl =
-        'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
-    final tempDir = Directory.systemTemp.createTempSync();
-    final zipFilePath = path.join(tempDir.path, 'ffmpeg.zip');
-
-    // Download FFmpeg zip file
-    final response = await http.get(Uri.parse(ffmpegUrl));
-    final zipFile = File(zipFilePath);
-    await zipFile.writeAsBytes(response.bodyBytes);
-
-    // Extract the zip file
-    final bytes = zipFile.readAsBytesSync();
-    final archive = ZipDecoder().decodeBytes(bytes);
-    for (final file in archive) {
-      final filePath = path.join(tempDir.path, file.name);
-      if (file.isFile) {
-        final f = File(filePath);
-        f.createSync(recursive: true);
-        f.writeAsBytesSync(file.content as List<int>);
-      } else {
-        Directory(filePath).create(recursive: true);
-      }
-    }
-
-    final extractedDir = Directory(tempDir.path)
-        .listSync()
-        .firstWhere((element) => element is Directory);
-
-    // Add the bin directory to PATH
-    final binPath = path.join(extractedDir.path, 'bin');
-    final currentPath = Platform.environment['PATH'];
-    final newPath = '$currentPath;$binPath';
-
-    // Set the PATH environment variable
-    Process.runSync('setx', ['PATH', newPath]);
-
-    print('FFmpeg downloaded and PATH set successfully.');
-  }
-
-  Future<void> convertWebmToMp3(String inputPath, String outputPath) async {
-    // Ensure FFmpeg is available
-    await downloadAndSetupFFmpeg();
-
-    final result = await Process.run('ffmpeg', ['-i', inputPath, outputPath]);
-
-    if (result.exitCode == 0) {
-      print('Conversion successful');
-    } else {
-      print('Conversion failed: ${result.stderr}');
-    }
   }
 }
