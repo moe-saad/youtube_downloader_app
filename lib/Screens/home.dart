@@ -1,4 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:ffmpeg_kit_flutter/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter/return_code.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,24 +25,22 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  //variables declaration
-  //https://youtu.be/HwWb5xelC7s?si=QDdzOWoSdeJ5uqYH
-  String videoURL = '';
+  final String _savePathKey = 'savePath'; //shared preferences key for the
+  //location of the download folder
+  String videoURL = ''; //youtube video url
   String? _savePath = '';
-  final String _savePathKey = 'savePath';
-  double _progress = 0.0;
+  double _progress = 0.0; //downloading progress
   bool _isDownloading = false;
   bool _isLoading = false;
   var ytExplode = YoutubeExplode();
-  Video? video;
-  final TextEditingController _controller = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  MediaType? _selectedMediaType = MediaType.audio;
-  //list of audios
-  List<AudioOnlyStreamInfo> _audioList = [];
-  //list of videos
-  List<MuxedStreamInfo> _videoList = [];
-  Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
+  Video? video; //video instance when fetched from youtube
+  final TextEditingController _controller =
+      TextEditingController(); //controller for textInput
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>(); //form key
+  MediaType? _selectedMediaType = MediaType.audio; //
+  List<AudioOnlyStreamInfo> _audioList = []; //list of audios
+  List<MuxedStreamInfo> _videoList = []; //list of videos
+  final Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
 
   Future<void> loadVideoInfo(String url) async {
     video = await ytExplode.videos.get(url);
@@ -205,8 +205,6 @@ class _HomeState extends State<Home> {
         }
 
         if (Platform.isAndroid) {
-          // _savePath = '/storage/emulated/0/Download/${video!.id}.$itemtype';
-          // _savePath = '$_savePath/${video!.id}.$itemtype';
           _savePath = '$_savePath/${sanitizeFileName(video!.title)}.$itemtype';
         }
 
@@ -215,8 +213,7 @@ class _HomeState extends State<Home> {
           _savePath =
               '${_savePath!}\\${sanitizeFileName(video!.title)}.$itemtype';
         }
-        print('\n-----------------------savePath----------------------\n');
-        print(_savePath);
+
         //open the file
         var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
 
@@ -240,9 +237,7 @@ class _HomeState extends State<Home> {
         requestPermission();
       }
     } catch (e) {
-      if (Platform.isAndroid) {
-        _showToastmessage('Download Failed: ${e.toString()}');
-      }
+      _showToastmessage('Download Failed: ${e.toString()}');
       if (kDebugMode) {
         print('\n----------------------catch error----------------------\n');
       }
@@ -396,33 +391,41 @@ class _HomeState extends State<Home> {
                                     fontSize: 18,
                                   ),
                                 ),
-                                ListTile(
-                                  dense: true,
-                                  leading: Icon(
-                                    Icons.remove_red_eye,
-                                    color: Theme.of(context).primaryColor,
-                                  ),
-                                  title: Text(
-                                    ' ${video!.engagement.viewCount.toString()}',
-                                    style: const TextStyle(
-                                      fontSize: 18,
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.remove_red_eye,
+                                      color: Theme.of(context).primaryColor,
                                     ),
-                                  ),
+                                    const SizedBox(
+                                      width: 8.0,
+                                    ),
+                                    Text(
+                                      ' ${video!.engagement.viewCount.toString().trim()}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                ListTile(
-                                  dense: true,
-                                  leading: Icon(
-                                    Icons.access_time,
-                                    color: Theme.of(context).primaryColor,
-                                  ),
-                                  title: Text(
-                                    formatDuration(
-                                      video!.duration.toString(),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.access_time,
+                                      color: Theme.of(context).primaryColor,
                                     ),
-                                    style: const TextStyle(
-                                      fontSize: 18,
+                                    const SizedBox(
+                                      width: 8.0,
                                     ),
-                                  ),
+                                    Text(
+                                      formatDuration(
+                                        video!.duration.toString(),
+                                      ),
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -508,4 +511,39 @@ class _HomeState extends State<Home> {
       ),
     );
   }
+
+  String changeFileExtensionToMp3(String filePath) {
+    // Extract the directory and file name from the file path
+    String directory = filePath.substring(0, filePath.lastIndexOf('/'));
+    String fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+
+    // Change the file extension to .mp3
+    String newFileName = fileName.replaceAll(RegExp(r'\.[^\.]+$'), '.mp3');
+
+    // Return the new file path
+    return '$directory/$newFileName';
+  }
+
+  // void executeFFmpegCommand(String inputPath, String outputPath) async {
+  //   print('\n$inputPath - $outputPath\n');
+  //   final command = '-i $inputPath -vn $outputPath';
+
+  //   FFmpegKit.execute(command).then((session) async {
+  //     final returnCode = await session.getReturnCode();
+  //     final output = await session.getOutput();
+  //     final logs = await session.getAllLogsAsString();
+  //     final statistics = await session.getStatistics();
+
+  //     if (ReturnCode.isSuccess(returnCode)) {
+  //       print('Command executed successfully');
+  //     } else if (ReturnCode.isCancel(returnCode)) {
+  //       print('Command cancelled');
+  //     } else {
+  //       print('Command failed with return code $returnCode');
+  //       print('Output: $output');
+  //       print('Logs: $logs');
+  //       print('Statistics: $statistics');
+  //     }
+  //   });
+  // }
 }
