@@ -1,59 +1,119 @@
-import 'package:flutter/material.dart';
+// Row(
+              //   children: [
+              //     Expanded(
+              //       flex: 1,
+              //       child: ListTile(
+              //         title: const Text('Audio'),
+              //         leading: Radio<MediaType>(
+              //           value: MediaType.audio,
+              //           groupValue: _selectedMediaType,
+              //           onChanged: (MediaType? value) {
+              //             setState(() {
+              //               _selectedMediaType = value;
+              //             });
+              //           },
+              //         ),
+              //       ),
+              //     ),
+              //     Expanded(
+              //       flex: 1,
+              //       child: ListTile(
+              //         title: const Text('Video'),
+              //         leading: Radio<MediaType>(
+              //           value: MediaType.video,
+              //           groupValue: _selectedMediaType,
+              //           onChanged: (MediaType? value) {
+              //             setState(() {
+              //               _selectedMediaType = value;
+              //             });
+              //           },
+              //         ),
+              //       ),
+              //     ),
+              //   ],
+              // ),
 
-void main() {
-  runApp(MyApp());
-}
+              // _isLoading
+              //     ? LayoutBuilder(
+              //         builder: (context, constraints) {
+              //           List<Widget> children = [
+              //             Image.network(
+              //               video!.thumbnails.highResUrl,
+              //               height: 200,
+              //             ),
+              //             Padding(
+              //               padding: const EdgeInsets.all(18.0),
+              //               child: Column(
+              //                 crossAxisAlignment: CrossAxisAlignment.start,
+              //                 children: [
+              //                   Text(
+              //                     video!.title,
+              //                     maxLines: 1,
+              //                     overflow: TextOverflow.ellipsis,
+              //                     style: primaryText,
+              //                   ),
+              //                   Text(
+              //                     video!.author,
+              //                     style: const TextStyle(
+              //                       fontSize: 18,
+              //                     ),
+              //                   ),
+              //                   Row(
+              //                     children: [
+              //                       Icon(
+              //                         Icons.remove_red_eye,
+              //                         color: Theme.of(context).primaryColor,
+              //                       ),
+              //                       const SizedBox(
+              //                         width: 8.0,
+              //                       ),
+              //                       Text(
+              //                         ' ${video!.engagement.viewCount.toString().trim()}',
+              //                         style: const TextStyle(
+              //                           fontSize: 18,
+              //                         ),
+              //                       ),
+              //                     ],
+              //                   ),
+              //                   Row(
+              //                     children: [
+              //                       Icon(
+              //                         Icons.access_time,
+              //                         color: Theme.of(context).primaryColor,
+              //                       ),
+              //                       const SizedBox(
+              //                         width: 8.0,
+              //                       ),
+              //                       Text(
+              //                         formatDuration(
+              //                           video!.duration.toString(),
+              //                         ),
+              //                         style: const TextStyle(
+              //                           fontSize: 18,
+              //                         ),
+              //                       ),
+              //                     ],
+              //                   ),
+              //                 ],
+              //               ),
+              //             )
+              //           ];
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Toggle Switch',
-      home: ToggleSwitchExample(),
-    );
-  }
-}
-
-class ToggleSwitchExample extends StatefulWidget {
-  @override
-  _ToggleSwitchExampleState createState() => _ToggleSwitchExampleState();
-}
-
-class _ToggleSwitchExampleState extends State<ToggleSwitchExample> {
-  List<bool> _selections = [true, false];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Toggle Switch Example'),
-      ),
-      body: Center(
-        child: ToggleButtons(
-          borderRadius: BorderRadius.circular(30.0),
-          isSelected: _selections,
-          selectedColor: Colors.white,
-          fillColor: Colors.grey,
-          color: Colors.black,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text('Skins'),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text('Details'),
-            ),
-          ],
-          onPressed: (int index) {
-            setState(() {
-              for (int i = 0; i < _selections.length; i++) {
-                _selections[i] = i == index;
-              }
-            });
-          },
-        ),
-      ),
-    );
-  }
-}
+              //           return Container(
+              //             alignment: Alignment.topLeft,
+              //             // decoration: BoxDecoration(
+              //             //   border: Border.all(color: Colors.black),
+              //             // ),
+              //             child: screenSize.width < 600
+              //                 ? Column(
+              //                     mainAxisAlignment: MainAxisAlignment.start,
+              //                     children: children,
+              //                   )
+              //                 : Row(
+              //                     mainAxisAlignment: MainAxisAlignment.start,
+              //                     children: children,
+              //                   ),
+              //           );
+              //         },
+              //       )
+              //     : const SizedBox.shrink(),

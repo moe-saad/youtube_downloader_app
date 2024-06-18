@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -81,22 +80,14 @@ bool isValidYouTubeUrl(String url) {
 }
 
 //get the directory path from the user
-Future<String?> getUserSavePath() async {
+Future<String> getUserSavePath() async {
   String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
 
   if (selectedDirectory != null) {
     return selectedDirectory;
   } else {
     // User canceled the picker
-    throw ("User canceled the File picker");
-  }
-}
-
-//request permission if it's not granted
-Future<void> requestPermission() async {
-  var status = await Permission.storage.status;
-  if (!status.isGranted) {
-    await Permission.storage.request();
+    throw 'user canceled file picking';
   }
 }
 

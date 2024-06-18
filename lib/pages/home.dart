@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_downloader_app/pages/settings.dart';
 import 'package:youtube_downloader_app/widgets/audio_item.dart';
 import 'package:youtube_downloader_app/widgets/video_item.dart';
+import 'package:youtube_downloader_app/widgets/warningDialog.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
 import '../utils/methods.dart';
@@ -23,7 +24,8 @@ class _HomeState extends State<Home> {
   final String _savePathKey = 'savePath'; //shared preferences key for the
   //location of the download folder
   String videoURL = ''; //youtube video url
-  String? _savePath;
+  //save path is where the downloaded file should be saved
+  late String _savePath;
   double _progress = 0.0; //downloading progress
   bool _isDownloading = false;
   bool _isLoading = false;
@@ -39,8 +41,9 @@ class _HomeState extends State<Home> {
   final Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
   //toggle button list to specify which button is selected
   final List<bool> _selections = [true, false];
+  Future<bool>? _future;
 
-  Future<void> loadVideoInfo(String url) async {
+  Future<bool> loadVideoInfo(String url) async {
     try {
       video = await ytExplode.videos.get(url);
       //call the manifest
@@ -48,9 +51,8 @@ class _HomeState extends State<Home> {
       _audioList = manifest.audioOnly.toList();
       _videoList = manifest.muxed.toList();
 
-      setState(() {
-        _isLoading = true;
-      });
+//setstate to make the audio and video lists shown when the information are ready
+      setState(() {});
     } catch (e) {
       showDialog(
         context: context,
@@ -63,7 +65,7 @@ class _HomeState extends State<Home> {
             ),
             title: const Text('Invalid Youtube URL'),
             content: const Text(
-                'please check if this url reffere to a Youtube Video not a playlist,not a live Stream  or others'),
+                'Please check if this url reffere to a Youtube Video \nnot a playlist, not a live Stream or others'),
             actions: [
               TextButton(
                   onPressed: () {
@@ -74,6 +76,8 @@ class _HomeState extends State<Home> {
           );
         },
       );
+    } finally {
+      return _isLoading;
     }
   }
 
@@ -92,24 +96,24 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
-    setState(() {
-      //to show the progress bar
-      _isDownloading = true;
-      // Reset progress to 0 at the beginning of the download
-      _progress = 0.0;
-    });
-    try {
-      // Get the actual stream
-      var stream = ytExplode.videos.streamsClient.get(streamInfo);
+    if (await Permission.storage.request().isGranted) {
+      setState(() {
+        //to show the progress bar
+        _isDownloading = true;
+        // Reset progress to 0 at the beginning of the download
+        _progress = 0.0;
+      });
+      try {
+        // Get the actual stream
+        var stream = ytExplode.videos.streamsClient.get(streamInfo);
 
-      if (await Permission.storage.request().isGranted) {
         // Either the permission was already granted before or the user just granted it.
         SharedPreferences sharedPref = await _sharedPref;
         if (sharedPref.getString(_savePathKey) == null) {
           _savePath = await getUserSavePath();
-          sharedPref.setString(_savePathKey, _savePath!);
+          sharedPref.setString(_savePathKey, _savePath);
         } else {
-          _savePath = sharedPref.getString(_savePathKey);
+          _savePath = sharedPref.getString(_savePathKey)!;
         }
 
         if (Platform.isAndroid) {
@@ -117,9 +121,8 @@ class _HomeState extends State<Home> {
         }
 
         //windows
-        else if (Platform.isWindows) {
-          _savePath =
-              '${_savePath!}\\${sanitizeFileName(video!.title)}.$itemtype';
+        if (Platform.isWindows) {
+          _savePath = '$_savePath\\${sanitizeFileName(video!.title)}.$itemtype';
         }
 
         //open the file
@@ -140,24 +143,37 @@ class _HomeState extends State<Home> {
         // Close the file.
         await fileStream.flush();
         await fileStream.close();
-      } else {
-        // The permission was denied or not yet requested.
-        requestPermission();
+      } catch (e) {
+        showToastmessage(context, 'Download Failed: ${e.toString()}');
+        if (kDebugMode) {
+          print('\n----------------------catch error----------------------\n');
+        }
+        if (kDebugMode) {
+          print(e.toString());
+        }
       }
-    } catch (e) {
-      showToastmessage(context, 'Download Failed: ${e.toString()}');
-      if (kDebugMode) {
-        print('\n----------------------catch error----------------------\n');
+      //finally
+      finally {
+        setState(() {
+          _isDownloading = false;
+        });
       }
-      if (kDebugMode) {
-        print(e.toString());
-      }
-    }
-    //finally
-    finally {
-      setState(() {
-        _isDownloading = false;
-      });
+    } else {
+      // The permission was denied or not yet requested.
+      showDialog(
+        context: context,
+        builder: (context) {
+          return const AboutDialog(
+            applicationIcon: Icon(
+              Icons.error,
+              color: Colors.red,
+            ),
+            children: [
+              Text('this app required storage access to save your downloads')
+            ],
+          );
+        },
+      );
     }
   }
 
@@ -215,10 +231,6 @@ class _HomeState extends State<Home> {
                           onPressed: () {
                             setState(() {
                               _controller.clear();
-                              _isLoading = false;
-                              _audioList.clear();
-                              _videoList.clear();
-                              video = null;
                             });
                           },
                           icon: const Icon(
@@ -258,7 +270,10 @@ class _HomeState extends State<Home> {
                       onPressed: () async {
                         if (_formKey.currentState!.validate()) {
                           if (await checkConnection(context)) {
-                            loadVideoInfo(videoURL);
+                            // loadVideoInfo(videoURL);
+                            setState(() {
+                              _future = loadVideoInfo(videoURL);
+                            });
                           }
                         }
                       },
@@ -274,130 +289,114 @@ class _HomeState extends State<Home> {
                   ],
                 ),
               ),
-              //load video info
               const SizedBox(
                 height: 20.0,
               ),
-              _isLoading
-                  ? LayoutBuilder(
-                      builder: (context, constraints) {
-                        List<Widget> children = [
-                          Image.network(
-                            video!.thumbnails.highResUrl,
-                            height: 200,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(18.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+
+              //load video info
+              FutureBuilder(
+                future: _future,
+                builder: (context, snapshot) {
+                  List<Widget> childrenlist;
+                  if (snapshot.hasData) {
+                    childrenlist = [
+                      Image.network(
+                        video!.thumbnails.highResUrl,
+                        height: 200,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(18.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              video!.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: primaryText,
+                            ),
+                            Text(
+                              video!.author,
+                              style: const TextStyle(
+                                fontSize: 18,
+                              ),
+                            ),
+                            //view count
+                            Row(
                               children: [
-                                Text(
-                                  video!.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: primaryText,
+                                Icon(
+                                  Icons.remove_red_eye,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                const SizedBox(
+                                  width: 8.0,
                                 ),
                                 Text(
-                                  video!.author,
+                                  ' ${video!.engagement.viewCount.toString().trim()}',
                                   style: const TextStyle(
                                     fontSize: 18,
                                   ),
                                 ),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.remove_red_eye,
-                                      color: Theme.of(context).primaryColor,
-                                    ),
-                                    const SizedBox(
-                                      width: 8.0,
-                                    ),
-                                    Text(
-                                      ' ${video!.engagement.viewCount.toString().trim()}',
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ],
+                              ],
+                            ),
+                            //video duration
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.access_time,
+                                  color: Theme.of(context).primaryColor,
                                 ),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.access_time,
-                                      color: Theme.of(context).primaryColor,
-                                    ),
-                                    const SizedBox(
-                                      width: 8.0,
-                                    ),
-                                    Text(
-                                      formatDuration(
-                                        video!.duration.toString(),
-                                      ),
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(
+                                  width: 8.0,
+                                ),
+                                Text(
+                                  formatDuration(
+                                    video!.duration.toString(),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                  ),
                                 ),
                               ],
                             ),
-                          )
-                        ];
-
-                        return Container(
-                          alignment: Alignment.topLeft,
-                          // decoration: BoxDecoration(
-                          //   border: Border.all(color: Colors.black),
-                          // ),
-                          child: screenSize.width < 600
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: children,
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: children,
-                                ),
+                          ],
+                        ),
+                      ),
+                    ];
+                  } else if (snapshot.hasError) {
+                    showDialog(
+                      barrierDismissible: true,
+                      context: context,
+                      builder: (context) => const WarningDialog(
+                          title: 'some Error(s) Occured',
+                          content:
+                              'Please check your internet connection or you are using a valid Youutbe URL'),
+                    );
+                    childrenlist = [];
+                  } else if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    childrenlist = [
+                      const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ];
+                  } else {
+                    childrenlist = [];
+                  }
+                  return screenSize.width < 600
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: childrenlist,
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: childrenlist,
                         );
-                      },
-                    )
-                  : const SizedBox.shrink(),
+                },
+              ),
 
-              const Divider(),
-              // Row(
-              //   children: [
-              //     Expanded(
-              //       flex: 1,
-              //       child: ListTile(
-              //         title: const Text('Audio'),
-              //         leading: Radio<MediaType>(
-              //           value: MediaType.audio,
-              //           groupValue: _selectedMediaType,
-              //           onChanged: (MediaType? value) {
-              //             setState(() {
-              //               _selectedMediaType = value;
-              //             });
-              //           },
-              //         ),
-              //       ),
-              //     ),
-              //     Expanded(
-              //       flex: 1,
-              //       child: ListTile(
-              //         title: const Text('Video'),
-              //         leading: Radio<MediaType>(
-              //           value: MediaType.video,
-              //           groupValue: _selectedMediaType,
-              //           onChanged: (MediaType? value) {
-              //             setState(() {
-              //               _selectedMediaType = value;
-              //             });
-              //           },
-              //         ),
-              //       ),
-              //     ),
-              //   ],
-              // ),
+              // const Divider(),
+
               Center(
                 child: ToggleButtons(
                   borderRadius: BorderRadius.circular(30.0),
