@@ -126,7 +126,7 @@ class _HomeState extends State<Home> {
         }
 
         //open the file
-        var fileStream = File(_savePath!).openWrite(mode: FileMode.append);
+        var fileStream = File(_savePath).openWrite(mode: FileMode.append);
 
         var totalBytes = streamInfo.size.totalBytes;
         var downloadedBytes = 0;
@@ -420,8 +420,6 @@ class _HomeState extends State<Home> {
                         _selections[i] = i == index;
                         _selectedMediaType = MediaType.values[index];
                       }
-
-                      print(_selectedMediaType);
                     });
                   },
                 ),
