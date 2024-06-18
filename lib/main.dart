@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:youtube_downloader_app/Screens/home.dart';
-import 'package:youtube_downloader_app/Screens/settings.dart';
+import 'package:youtube_downloader_app/pages/home.dart';
+import 'package:youtube_downloader_app/pages/settings.dart';
 
 void main() {
   runApp(const MyApp());

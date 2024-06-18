@@ -1,6 +1,4 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:ffmpeg_kit_flutter/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter/return_code.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,11 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:youtube_downloader_app/Screens/settings.dart';
+import 'package:youtube_downloader_app/pages/settings.dart';
 import 'package:youtube_downloader_app/widgets/audio_item.dart';
 import 'package:youtube_downloader_app/widgets/video_item.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
+import '../utils/methods.dart';
 
 enum MediaType { audio, video }
 
@@ -43,15 +42,40 @@ class _HomeState extends State<Home> {
   final Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
 
   Future<void> loadVideoInfo(String url) async {
-    video = await ytExplode.videos.get(url);
-    //call the manifest
-    var manifest = await ytExplode.videos.streamsClient.getManifest(url);
-    _audioList = manifest.audioOnly.toList();
-    _videoList = manifest.muxed.toList();
+    try {
+      video = await ytExplode.videos.get(url);
+      //call the manifest
+      var manifest = await ytExplode.videos.streamsClient.getManifest(url);
+      _audioList = manifest.audioOnly.toList();
+      _videoList = manifest.muxed.toList();
 
-    setState(() {
-      _isLoading = true;
-    });
+      setState(() {
+        _isLoading = true;
+      });
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            icon: const Icon(
+              Icons.error,
+              color: Colors.red,
+              size: 50,
+            ),
+            title: const Text('Invalid Youtube URL'),
+            content: const Text(
+                'please check if this url reffere to a Youtube Video not a playlist,not a live Stream  or others'),
+            actions: [
+              TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close the dialog
+                  },
+                  child: const Text('OK'))
+            ],
+          );
+        },
+      );
+    }
   }
 
 //return true of false based on internet connection
@@ -137,8 +161,8 @@ class _HomeState extends State<Home> {
             toastLength: Toast.LENGTH_LONG,
             gravity: ToastGravity.BOTTOM,
             timeInSecForIosWeb: 1,
-            backgroundColor: Theme.of(context).primaryColor,
-            textColor: Colors.white,
+            backgroundColor: Colors.white,
+            textColor: Theme.of(context).primaryColor,
             fontSize: 16.0,
           )
         : null;
@@ -359,6 +383,10 @@ class _HomeState extends State<Home> {
                         style: primaryText,
                       ),
                     ),
+                    FilledButton(
+                      onPressed: () {},
+                      child: const Text('Cancel Download'),
+                    ),
                   ],
                 ),
               ),
@@ -511,39 +539,4 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  String changeFileExtensionToMp3(String filePath) {
-    // Extract the directory and file name from the file path
-    String directory = filePath.substring(0, filePath.lastIndexOf('/'));
-    String fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
-
-    // Change the file extension to .mp3
-    String newFileName = fileName.replaceAll(RegExp(r'\.[^\.]+$'), '.mp3');
-
-    // Return the new file path
-    return '$directory/$newFileName';
-  }
-
-  // void executeFFmpegCommand(String inputPath, String outputPath) async {
-  //   print('\n$inputPath - $outputPath\n');
-  //   final command = '-i $inputPath -vn $outputPath';
-
-  //   FFmpegKit.execute(command).then((session) async {
-  //     final returnCode = await session.getReturnCode();
-  //     final output = await session.getOutput();
-  //     final logs = await session.getAllLogsAsString();
-  //     final statistics = await session.getStatistics();
-
-  //     if (ReturnCode.isSuccess(returnCode)) {
-  //       print('Command executed successfully');
-  //     } else if (ReturnCode.isCancel(returnCode)) {
-  //       print('Command cancelled');
-  //     } else {
-  //       print('Command failed with return code $returnCode');
-  //       print('Output: $output');
-  //       print('Logs: $logs');
-  //       print('Statistics: $statistics');
-  //     }
-  //   });
-  // }
 }
