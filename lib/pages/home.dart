@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +8,7 @@ import 'package:youtube_downloader_app/widgets/video_item.dart';
 import 'package:youtube_downloader_app/widgets/warningDialog.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
+import 'package:path/path.dart' as path;
 import '../utils/methods.dart';
 
 enum MediaType { audio, video }
@@ -23,12 +24,13 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   final String _savePathKey = 'savePath'; //shared preferences key for the
   //location of the download folder
-  String videoURL = ''; //youtube video url
+  //youtube video url
+  String videoURL = '';
   //save path is where the downloaded file should be saved
   late String _savePath;
-  double _progress = 0.0; //downloading progress
+  //downloading progress
+  double _progress = 0.0;
   bool _isDownloading = false;
-  bool _isLoading = false;
   YoutubeExplode ytExplode = YoutubeExplode();
   Video? video; //video instance when fetched from youtube
   final TextEditingController _controller =
@@ -41,9 +43,11 @@ class _HomeState extends State<Home> {
   final Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
   //toggle button list to specify which button is selected
   final List<bool> _selections = [true, false];
-  Future<bool>? _future;
+  Future<StreamManifest>? _future;
+  StreamSubscription<List<int>>? subscription;
+  IOSink? _fileStream;
 
-  Future<bool> loadVideoInfo(String url) async {
+  Future<StreamManifest> loadVideoInfo(String url) async {
     try {
       video = await ytExplode.videos.get(url);
       //call the manifest
@@ -51,8 +55,9 @@ class _HomeState extends State<Home> {
       _audioList = manifest.audioOnly.toList();
       _videoList = manifest.muxed.toList();
 
-//setstate to make the audio and video lists shown when the information are ready
+      //setstate to make the audio and video lists shown when the information are ready
       setState(() {});
+      return manifest;
     } catch (e) {
       showDialog(
         context: context,
@@ -76,8 +81,7 @@ class _HomeState extends State<Home> {
           );
         },
       );
-    } finally {
-      return _isLoading;
+      throw e.toString();
     }
   }
 
@@ -92,7 +96,6 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     checkConnection(context);
-    _isLoading = false;
   }
 
   Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
@@ -116,64 +119,91 @@ class _HomeState extends State<Home> {
           _savePath = sharedPref.getString(_savePathKey)!;
         }
 
-        if (Platform.isAndroid) {
-          _savePath = '$_savePath/${sanitizeFileName(video!.title)}.$itemtype';
-        }
-
-        //windows
-        if (Platform.isWindows) {
-          _savePath = '$_savePath\\${sanitizeFileName(video!.title)}.$itemtype';
-        }
+        _savePath = path.join(_savePath,
+            '${sanitizeFileName('${video!.title}-${streamInfo.bitrate}').trim()}.$itemtype');
 
         //open the file
-        var fileStream = File(_savePath).openWrite(mode: FileMode.append);
-
+        _fileStream = File(_savePath).openWrite(mode: FileMode.append);
         var totalBytes = streamInfo.size.totalBytes;
         var downloadedBytes = 0;
 
-        await for (var data in stream) {
-          downloadedBytes += data.length;
-          fileStream.add(data);
-          double progress = downloadedBytes / totalBytes;
-          _updateProgress(progress);
-        }
+        // Create a StreamSubscription to handle the stream
+        subscription = stream.listen(
+          (data) {
+            downloadedBytes += data.length;
+            _fileStream!.add(data);
+            double progress = downloadedBytes / totalBytes;
+            _updateProgress(progress);
+          },
+          onError: (error) {
+            // Handle the stream error
+            throw Exception('Data connection lost: $error');
+          },
+          cancelOnError: true, // Cancel the subscription on error
+        );
 
-        showToastmessage(context, 'Download Complete: ${video!.title}');
+        // Wait for the subscription to complete
+        await subscription!.asFuture();
+
+        downloadedBytes == totalBytes
+            ? ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Download Finished'),
+                ),
+              )
+            : ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Download Failed'),
+                ),
+              );
 
         // Close the file.
-        await fileStream.flush();
-        await fileStream.close();
+        await _fileStream!.flush();
+        await _fileStream!.close();
       } catch (e) {
-        showToastmessage(context, 'Download Failed: ${e.toString()}');
-        if (kDebugMode) {
-          print('\n----------------------catch error----------------------\n');
-        }
-        if (kDebugMode) {
-          print(e.toString());
-        }
+        print('\n--------------catch error----------------\n');
+        print(e.toString());
       }
       //finally
       finally {
         setState(() {
           _isDownloading = false;
+          subscription = null;
+          _fileStream = null;
         });
       }
     } else {
-      // The permission was denied or not yet requested.
+      // The permission was denied
       showDialog(
         context: context,
         builder: (context) {
-          return const AboutDialog(
-            applicationIcon: Icon(
-              Icons.error,
-              color: Colors.red,
-            ),
-            children: [
-              Text('this app required storage access to save your downloads')
-            ],
-          );
+          return const WarningDialog(
+              title: 'Permission Denied',
+              content: 'Storage permission is required to save your Downloads');
         },
       );
+    }
+  }
+
+  Future<void> _cancelDownload() async {
+    await subscription?.cancel();
+    await _fileStream?.flush();
+    await _fileStream?.close();
+    await _cleanupFile();
+    setState(() {
+      subscription = null;
+      _fileStream = null;
+    });
+  }
+
+  Future<void> _cleanupFile() async {
+    try {
+      var file = File(_savePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      print('Error while deleting file: $e');
     }
   }
 
@@ -283,9 +313,23 @@ class _HomeState extends State<Home> {
                       ),
                     ),
                     FilledButton(
-                      onPressed: () {},
+                      onPressed: () async {
+                        if (subscription != null) {
+                          await _cancelDownload();
+                          setState(() {
+                            _isDownloading = false;
+                          });
+                        }
+                      },
                       child: const Text('Cancel Download'),
                     ),
+                    TextButton(
+                      onPressed: () async {
+                        var prefs = await _sharedPref;
+                        prefs.clear();
+                      },
+                      child: const Text('clear'),
+                    )
                   ],
                 ),
               ),

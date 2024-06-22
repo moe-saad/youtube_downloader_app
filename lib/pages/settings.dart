@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,6 +91,13 @@ class _SettingsScreendState extends State<SettingsScreend> {
                       child: const Text('open app settings'),
                     )
                   : const SizedBox.shrink(),
+              Padding(
+                padding: EdgeInsets.all(15.0),
+                child: Text(
+                  'Note: To avoid potential errors, please refrain from saving your files in system folders such as Documents or Downloads. Instead, create and use a dedicated folder for your files.',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
             ];
           }
           // return Flexible(

@@ -16,6 +16,7 @@ class WarningDialog extends StatelessWidget {
       iconColor: Colors.red,
       title: Text(title),
       titleTextStyle: const TextStyle(
+        color: Colors.red,
         fontSize: 20.0,
         fontWeight: FontWeight.bold,
       ),
