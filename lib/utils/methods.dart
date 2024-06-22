@@ -111,3 +111,14 @@ String sanitizeFileName(String input) {
   // Replace all invalid characters with an empty string
   return input.replaceAll(invalidChars, '');
 }
+
+Future<void> cleanupFile(String savePath) async {
+  try {
+    var file = File(savePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  } catch (e) {
+    throw 'error while deleting the file ${e.toString()}';
+  }
+}

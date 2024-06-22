@@ -1,36 +1,39 @@
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class SettingsScreend extends StatefulWidget {
+class SettingsScreen extends StatefulWidget {
   static const screenRoute = 'settingsScreen';
 
-  const SettingsScreend({
+  const SettingsScreen({
     super.key,
   });
 
   @override
-  State<SettingsScreend> createState() => _SettingsScreendState();
+  State<SettingsScreen> createState() => _SettingsScreendState();
 }
 
-class _SettingsScreendState extends State<SettingsScreend> {
-  late String _savePathkey;
+class _SettingsScreendState extends State<SettingsScreen> {
+  late String _savePathKey;
   late Function getSaveFolder;
   final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
 
   Future<String?> loadDownloadLocation() async {
     final SharedPreferences prefs = await _prefs;
-    return prefs.getString(_savePathkey);
+    return prefs.getString(_savePathKey);
   }
 
   @override
   Widget build(BuildContext context) {
+    final Size screenSize = MediaQuery.of(context).size;
     Map<dynamic, dynamic>? arguments =
-        ModalRoute.of(context)!.settings.arguments as Map;
-    _savePathkey = arguments['savePathKey'];
-    getSaveFolder = arguments['getuserpath'];
+        ModalRoute.of(context)!.settings.arguments as Map?;
+    if (arguments != null) {
+      _savePathKey = arguments['savePathKey'];
+      getSaveFolder = arguments['getuserpath'];
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -42,78 +45,83 @@ class _SettingsScreendState extends State<SettingsScreend> {
       body: FutureBuilder(
         future: loadDownloadLocation(),
         builder: (context, snapshot) {
-          List<Widget> children;
           if (snapshot.hasError) {
-            children = <Widget>[
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 60,
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 60,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Text('Error: ${snapshot.error}'),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Text('Error: ${snapshot.error}'),
-              ),
-            ];
+            );
           } else {
-            children = <Widget>[
-              //show the current path
-              ListTile(
-                leading: Icon(
-                  Icons.download,
-                  color: Theme.of(context).primaryColor,
-                ),
-                title: Text(
-                  'Download Location',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                subtitle: Text(
-                  '${snapshot.data}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                trailing: TextButton(
-                  onPressed: () async {
-                    String newpath = await getSaveFolder();
-                    final SharedPreferences prefs = await _prefs;
-                    setState(() {
-                      prefs.setString(_savePathkey, newpath);
-                    });
-                  },
-                  child: const Text('Change'),
+            return Center(
+              child: FractionallySizedBox(
+                widthFactor: screenSize.width < 700 ? 1 : 0.5,
+                heightFactor: 1,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: <Widget>[
+                    // Show the current path
+                    ListTile(
+                      leading: Icon(
+                        Icons.download,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      title: Text(
+                        'Download Location',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      subtitle: Text(
+                        snapshot.data ?? 'Not set',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          try {
+                            String newpath = await getSaveFolder();
+                            final SharedPreferences prefs = await _prefs;
+                            setState(() {
+                              prefs.setString(_savePathKey, newpath);
+                            });
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: ${e.toString()}'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Change'),
+                      ),
+                    ),
+                    if (Platform.isAndroid)
+                      ElevatedButton(
+                        onPressed: () {
+                          openAppSettings();
+                        },
+                        child: const Text('Open app settings'),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: Text(
+                        'Note: To avoid potential errors, please refrain from saving your files in system folders such as Documents or Downloads. Instead, create and use a dedicated folder for your files.',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
-              Platform.isAndroid
-                  ? ElevatedButton(
-                      onPressed: () {
-                        openAppSettings();
-                      },
-                      child: const Text('open app settings'),
-                    )
-                  : const SizedBox.shrink(),
-              Padding(
-                padding: EdgeInsets.all(15.0),
-                child: Text(
-                  'Note: To avoid potential errors, please refrain from saving your files in system folders such as Documents or Downloads. Instead, create and use a dedicated folder for your files.',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
-            ];
+            );
           }
-          // return Flexible(
-          //   child: FractionallySizedBox(
-          //     widthFactor: 0.5,
-          //     heightFactor: 1,
-          //     child: Column(
-          //       mainAxisAlignment: MainAxisAlignment.start,
-          //       children: children,
-          //     ),
-          //   ),
-          // );
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: children,
-          );
         },
       ),
     );

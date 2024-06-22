@@ -4,7 +4,14 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 class VideoItem extends StatelessWidget {
   final MuxedStreamInfo video;
   final Function saveVideo;
-  const VideoItem({super.key, required this.video, required this.saveVideo});
+  final bool isEnabled;
+  final int index;
+  const VideoItem(
+      {super.key,
+      required this.video,
+      required this.saveVideo,
+      required this.isEnabled,
+      required this.index});
 
   @override
   Widget build(BuildContext context) {
@@ -15,9 +22,9 @@ class VideoItem extends StatelessWidget {
       title: Text(
           '${video.videoResolution} - ${video.size} - ${video.framerate.framesPerSecond.toString()} fps'),
       trailing: IconButton(
-        icon: const Icon(Icons.download),
+        icon: Icon(isEnabled ? Icons.download : Icons.file_download_off),
         onPressed: () {
-          saveVideo('mp4', video);
+          isEnabled ? saveVideo('mp4', video, index) : null;
         },
       ),
     );

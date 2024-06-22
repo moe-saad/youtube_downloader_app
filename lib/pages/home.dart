@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_downloader_app/pages/settings.dart';
 import 'package:youtube_downloader_app/widgets/audio_item.dart';
 import 'package:youtube_downloader_app/widgets/video_item.dart';
-import 'package:youtube_downloader_app/widgets/warningDialog.dart';
+import 'package:youtube_downloader_app/widgets/warning_dialog.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
@@ -22,8 +22,8 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  final String _savePathKey = 'savePath'; //shared preferences key for the
-  //location of the download folder
+  //shared preferences key for the location of the download folder
+  final String _savePathKey = 'savePath';
   //youtube video url
   String videoURL = '';
   //save path is where the downloaded file should be saved
@@ -31,15 +31,19 @@ class _HomeState extends State<Home> {
   //downloading progress
   double _progress = 0.0;
   bool _isDownloading = false;
+  int? _downloadingIndex;
   YoutubeExplode ytExplode = YoutubeExplode();
-  Video? video; //video instance when fetched from youtube
-  final TextEditingController _controller =
-      TextEditingController(); //controller for textInput
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>(); //form key
-  // the default selected radio button
+  //video instance when fetched from youtube
+  Video? video;
+  //controller for textInput
+  final TextEditingController _controller = TextEditingController();
+  //form key the default selected radio buttons
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   MediaType? _selectedMediaType = MediaType.audio;
-  List<AudioOnlyStreamInfo> _audioList = []; //list of audios
-  List<MuxedStreamInfo> _videoList = []; //list of videos
+  //list of audios
+  List<AudioOnlyStreamInfo> _audioList = [];
+  //list of videos
+  List<MuxedStreamInfo> _videoList = [];
   final Future<SharedPreferences> _sharedPref = SharedPreferences.getInstance();
   //toggle button list to specify which button is selected
   final List<bool> _selections = [true, false];
@@ -98,11 +102,13 @@ class _HomeState extends State<Home> {
     checkConnection(context);
   }
 
-  Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
+  Future<void> downloadFunction(
+      String itemtype, StreamInfo streamInfo, int? index) async {
     if (await Permission.storage.request().isGranted) {
       setState(() {
         //to show the progress bar
         _isDownloading = true;
+        _downloadingIndex = index;
         // Reset progress to 0 at the beginning of the download
         _progress = 0.0;
       });
@@ -145,6 +151,7 @@ class _HomeState extends State<Home> {
         // Wait for the subscription to complete
         await subscription!.asFuture();
 
+        //show snack bar about downloading status
         downloadedBytes == totalBytes
             ? ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -161,13 +168,13 @@ class _HomeState extends State<Home> {
         await _fileStream!.flush();
         await _fileStream!.close();
       } catch (e) {
-        print('\n--------------catch error----------------\n');
-        print(e.toString());
+        throw e.toString();
       }
       //finally
       finally {
         setState(() {
           _isDownloading = false;
+          _downloadingIndex = null;
           subscription = null;
           _fileStream = null;
         });
@@ -189,22 +196,11 @@ class _HomeState extends State<Home> {
     await subscription?.cancel();
     await _fileStream?.flush();
     await _fileStream?.close();
-    await _cleanupFile();
+    await cleanupFile(_savePath);
     setState(() {
       subscription = null;
       _fileStream = null;
     });
-  }
-
-  Future<void> _cleanupFile() async {
-    try {
-      var file = File(_savePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (e) {
-      print('Error while deleting file: $e');
-    }
   }
 
   @override
@@ -228,7 +224,7 @@ class _HomeState extends State<Home> {
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.pushNamed(context, SettingsScreend.screenRoute,
+              Navigator.pushNamed(context, SettingsScreen.screenRoute,
                   arguments: {
                     'savePathKey': _savePathKey,
                     'getuserpath': getUserSavePath,
@@ -478,12 +474,18 @@ class _HomeState extends State<Home> {
                 itemBuilder: (context, index) {
                   return _selectedMediaType == MediaType.audio
                       ? AudioItem(
+                          index: index,
                           audio: _audioList[index],
                           saveAudio: downloadFunction,
+                          isEnabled:
+                              !_isDownloading || _downloadingIndex == index,
                         )
                       : VideoItem(
+                          index: index,
                           video: _videoList[index],
                           saveVideo: downloadFunction,
+                          isEnabled:
+                              !_isDownloading || _downloadingIndex == index,
                         );
                 },
               ),
