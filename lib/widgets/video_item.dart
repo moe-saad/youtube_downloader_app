@@ -5,13 +5,12 @@ class VideoItem extends StatelessWidget {
   final MuxedStreamInfo video;
   final Function saveVideo;
   final bool isEnabled;
-  final int index;
+
   const VideoItem(
       {super.key,
       required this.video,
       required this.saveVideo,
-      required this.isEnabled,
-      required this.index});
+      required this.isEnabled});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +23,7 @@ class VideoItem extends StatelessWidget {
       trailing: IconButton(
         icon: Icon(isEnabled ? Icons.download : Icons.file_download_off),
         onPressed: () {
-          isEnabled ? saveVideo('mp4', video, index) : null;
+          isEnabled ? saveVideo('mp4', video) : null;
         },
       ),
     );

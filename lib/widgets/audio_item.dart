@@ -7,14 +7,12 @@ class AudioItem extends StatelessWidget {
   final AudioOnlyStreamInfo audio;
   final Function saveAudio;
   final bool isEnabled;
-  final int index;
 
   const AudioItem(
       {super.key,
       required this.audio,
       required this.saveAudio,
-      required this.isEnabled,
-      required this.index});
+      required this.isEnabled});
 
   String audioType() {
     String mainType = audio.codec.toString().split('/')[1].split(';')[0];
@@ -35,7 +33,7 @@ class AudioItem extends StatelessWidget {
       trailing: IconButton(
         icon: Icon(isEnabled ? Icons.download : Icons.file_download_off),
         onPressed: () {
-          isEnabled ? saveAudio(audioType(), audio, index) : null;
+          isEnabled ? saveAudio(audioType(), audio) : null;
         },
       ),
     );

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_downloader_app/pages/settings.dart';
 import 'package:youtube_downloader_app/widgets/audio_item.dart';
@@ -26,12 +28,13 @@ class _HomeState extends State<Home> {
   final String _savePathKey = 'savePath';
   //youtube video url
   String videoURL = '';
+  late StreamSubscription _intentSub;
+  var _sharedFiles = <SharedMediaFile>[];
   //save path is where the downloaded file should be saved
   late String _savePath;
   //downloading progress
   double _progress = 0.0;
   bool _isDownloading = false;
-  int? _downloadingIndex;
   YoutubeExplode ytExplode = YoutubeExplode();
   //video instance when fetched from youtube
   Video? video;
@@ -51,7 +54,7 @@ class _HomeState extends State<Home> {
   StreamSubscription<List<int>>? subscription;
   IOSink? _fileStream;
 
-  Future<StreamManifest> loadVideoInfo(String url) async {
+  Future<StreamManifest> loadVideoInfo(String url, BuildContext ctx) async {
     try {
       video = await ytExplode.videos.get(url);
       //call the manifest
@@ -63,28 +66,6 @@ class _HomeState extends State<Home> {
       setState(() {});
       return manifest;
     } catch (e) {
-      showDialog(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            icon: const Icon(
-              Icons.error,
-              color: Colors.red,
-              size: 50,
-            ),
-            title: const Text('Invalid Youtube URL'),
-            content: const Text(
-                'Please check if this url reffere to a Youtube Video \nnot a playlist, not a live Stream or others'),
-            actions: [
-              TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close the dialog
-                  },
-                  child: const Text('OK'))
-            ],
-          );
-        },
-      );
       throw e.toString();
     }
   }
@@ -95,20 +76,62 @@ class _HomeState extends State<Home> {
     });
   }
 
+  void _pasteText() async {
+    ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data != null) {
+      setState(() {
+        _controller.text = data.text!;
+      });
+    }
+  }
+
 //initial state to check internet connection at the startup of the app
   @override
   void initState() {
     super.initState();
     checkConnection(context);
+    // Listen to media sharing coming from outside the app while the app is in the memory.
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen(
+        (List<SharedMediaFile> value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {
+            _sharedFiles = value;
+            if (_sharedFiles.isNotEmpty) {
+              _controller.text = _sharedFiles.first.path;
+            }
+            print(_sharedFiles.map((f) => f.toMap()).toString());
+          }));
+    }, onError: (err) {
+      print("getIntentDataStream error: $err");
+    });
+
+    // Get the media sharing coming from outside the app while the app is closed.
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {
+            _sharedFiles = value;
+            if (_sharedFiles.isNotEmpty) {
+              _controller.text = _sharedFiles.first.path;
+            }
+            print(_sharedFiles.map((f) => f.toMap()).toString());
+
+            // Tell the library that we are done processing the intent
+            ReceiveSharingIntent.instance.reset();
+          }));
+    });
   }
 
-  Future<void> downloadFunction(
-      String itemtype, StreamInfo streamInfo, int? index) async {
+  @override
+  void dispose() {
+    _intentSub.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> downloadFunction(String itemtype, StreamInfo streamInfo) async {
     if (await Permission.storage.request().isGranted) {
       setState(() {
         //to show the progress bar
         _isDownloading = true;
-        _downloadingIndex = index;
+
         // Reset progress to 0 at the beginning of the download
         _progress = 0.0;
       });
@@ -174,7 +197,7 @@ class _HomeState extends State<Home> {
       finally {
         setState(() {
           _isDownloading = false;
-          _downloadingIndex = null;
+
           subscription = null;
           _fileStream = null;
         });
@@ -253,16 +276,28 @@ class _HomeState extends State<Home> {
                         hintText: 'Paste Youtube URL Here',
                         icon: const Icon(Icons.link_rounded),
                         iconColor: Theme.of(context).primaryColor,
-                        suffix: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _controller.clear();
-                            });
-                          },
-                          icon: const Icon(
-                            Icons.cleaning_services_outlined,
-                            color: Colors.deepPurple,
-                          ),
+                        suffix: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            IconButton(
+                              onPressed: _pasteText,
+                              icon: const Icon(
+                                Icons.paste_rounded,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _controller.clear();
+                                });
+                              },
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       validator: (value) {
@@ -277,6 +312,7 @@ class _HomeState extends State<Home> {
                         videoURL = value;
                       },
                     ),
+
                     const SizedBox(
                       height: 20,
                     ),
@@ -292,23 +328,21 @@ class _HomeState extends State<Home> {
                         ],
                       ),
                     ),
-                    ElevatedButton(
+                    FilledButton(
                       onPressed: () async {
                         if (_formKey.currentState!.validate()) {
                           if (await checkConnection(context)) {
-                            // loadVideoInfo(videoURL);
                             setState(() {
-                              _future = loadVideoInfo(videoURL);
+                              _future = loadVideoInfo(videoURL, context);
                             });
                           }
                         }
                       },
-                      child: Text(
+                      child: const Text(
                         'Search',
-                        style: primaryText,
                       ),
                     ),
-                    FilledButton(
+                    ElevatedButton(
                       onPressed: () async {
                         if (subscription != null) {
                           await _cancelDownload();
@@ -319,13 +353,6 @@ class _HomeState extends State<Home> {
                       },
                       child: const Text('Cancel Download'),
                     ),
-                    TextButton(
-                      onPressed: () async {
-                        var prefs = await _sharedPref;
-                        prefs.clear();
-                      },
-                      child: const Text('clear'),
-                    )
                   ],
                 ),
               ),
@@ -474,18 +501,14 @@ class _HomeState extends State<Home> {
                 itemBuilder: (context, index) {
                   return _selectedMediaType == MediaType.audio
                       ? AudioItem(
-                          index: index,
                           audio: _audioList[index],
                           saveAudio: downloadFunction,
-                          isEnabled:
-                              !_isDownloading || _downloadingIndex == index,
+                          isEnabled: !_isDownloading,
                         )
                       : VideoItem(
-                          index: index,
                           video: _videoList[index],
                           saveVideo: downloadFunction,
-                          isEnabled:
-                              !_isDownloading || _downloadingIndex == index,
+                          isEnabled: !_isDownloading,
                         );
                 },
               ),

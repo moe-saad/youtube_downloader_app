@@ -71,7 +71,7 @@ void showToastmessage(BuildContext ctx, String message) {
 
 bool isValidYouTubeUrl(String url) {
   final youtubeRegex = RegExp(
-    r'^(https?\:\/\/)?(www\.youtube\.com|music\.youtube\.com|youtu\.?be)\/.+$',
+    r'^(https?\:\/\/)?(www\.)?(youtube\.com|music\.youtube\.com|youtu\.be)\/.+$',
     caseSensitive: false,
     multiLine: false,
   );
